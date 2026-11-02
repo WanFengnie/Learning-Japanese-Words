@@ -1678,16 +1678,19 @@
   function normKana(s) {
     return String(s == null ? '' : s)
       .replace(/[\s　]/g, '')
-      .replace(/[～~]/g, '')
+      .replace(/[（(][^）)]*[）)]/g, '')
+      .replace(/[～~・･]/g, '')
       .replace(/[Ａ-Ｚａ-ｚ０-９]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); })
       .toLowerCase();
   }
   /* 忽略空白、波浪线、全角半角与长音符；片假名仍须写对 */
   function kanaEq(input, answer) {
-    var a = normKana(answer), b = normKana(input);
+    var b = normKana(input);
     if (!b) return false;
-    if (a === b) return true;
-    return a.replace(/ー/g, '') === b.replace(/ー/g, '');
+    /* 「そう/ああ」这类多写法词条：任一写法或整串均算对 */
+    var alts = [normKana(answer)].concat(String(answer == null ? '' : answer).split(/[\/／]/).map(normKana));
+    var bb = b.replace(/ー/g, '');
+    return alts.some(function (a) { return a && (a === b || a.replace(/ー/g, '') === bb); });
   }
   /* 长度格子：格数为标准答案假名数（小假名、长音符各算一格），多输入的字符追加虚线格 */
   function kanaCellsHtml(len, value, caret) {
