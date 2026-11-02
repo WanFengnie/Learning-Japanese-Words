@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>新标日 · 单词记忆</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand" id="brandHome" title="回到首页">
+      <div class="brand-mark">词</div>
+      <div class="brand-text">
+        <h1>新标日单词</h1>
+      </div>
+    </div>
+
+    <div class="searchbox">
+      <input id="searchInput" type="search" placeholder="搜索" autocomplete="off">
+    </div>
+
+    <div class="overview" id="overview"></div>
+
+    <div class="book-tabs" id="bookTabs"></div>
+
+    <div class="lesson-scroll" id="lessonScroll"></div>
+
+    <div class="sidebar-foot">
+      <button class="ghost-btn" id="exportBtn" title="把学习记录存成 JSON 文件">导出记录</button>
+      <button class="ghost-btn" id="importBtn" title="从 JSON 文件恢复学习记录">导入记录</button>
+      <button class="ghost-btn" id="resetBtn">重置学习记录</button>
+      <input type="file" id="importFile" accept=".json,application/json" hidden>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <button class="icon-btn only-mobile" id="menuBtn" aria-label="菜单">☰</button>
+      <div class="crumb" id="crumb"></div>
+      <nav class="modes" id="modes"></nav>
+    </header>
+    <section class="stage" id="stage"></section>
+  </main>
+</div>
+<nav class="tabbar" id="tabbar" aria-label="主导航">
+  <button data-mode="home">首页</button>
+  <button data-mode="study">学习</button>
+  <button data-mode="quiz">测验</button>
+  <button data-mode="review">复习</button>
+  <button data-mode="list">词表</button>
+</nav>
+<div class="scrim" id="scrim"></div>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

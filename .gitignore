@@ -1,0 +1,8 @@
+# 本地工具目录
+.claude/
+.workbuddy/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
