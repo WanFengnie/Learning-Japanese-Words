@@ -278,7 +278,7 @@
       step = lapseStep(prev);
     }                                               /* 待巩固保留 step */
     if (due === null) due = dueAfter(nl, step);
-    store.marks[k] = { lv: nl, t: Date.now(), learnedAt: learnedAt(prev) || Date.now(), ok: ok, step: step, err: err, due: due, od: od };
+    store.marks[k] = { lv: nl, t: Date.now(), learnedAt: learnedAt(prev) || Date.now(), reviewedAt: prev.reviewedAt || 0, ok: ok, step: step, err: err, due: due, od: od };
     bumpToday();
     saveStore();
     return { lv: nl, ok: ok, need: need, promoted: nl >= LV_MAX && !wasPro, left: Math.max(0, need - ok), capped: capped, shortened: shortened };
@@ -288,6 +288,7 @@
     var prev = recOf(w) || {};
     store.marks[keyOf(w)] = {
       learnedAt: learnedAt(prev) || Date.now(),
+      reviewedAt: prev.reviewedAt || 0,
       lv: 1, t: Date.now(), ok: 0, step: prev.lv >= LV_MAX ? lapseStep(prev) : (prev.step || 0),
       err: (prev.err || 0) + 1, due: dueAfter(1, 0), od: prev.od || ''
     };
@@ -296,6 +297,7 @@
   }
   /* 测验/复习按词结算：本轮全部题型答完且无错才判掌握；中途答错即打回待巩固 */
   function quizSettle(sess, cur, ok) {
+    recordReviewTime(cur.item);
     var k = keyOf(cur.item);
     var st = sess.stat || (sess.stat = {});
     var e = st[k] || (st[k] = { ok: 0, wrong: 0, done: 0 });
@@ -398,10 +400,24 @@
   }
   /* 按首次学习时间筛选，旧记录退回已有时间，复习不改变所属时间段 */
   function learnedAt(prev) { return prev.learnedAt || prev.t || 0; }
+  /* 只有在复习中提交答案或卡片判级才记时间，单纯浏览不算复习 */
+  function recordReviewTime(w) {
+    var m = recOf(w);
+    if (state.mode !== 'review' || !m) return;
+    m.reviewedAt = Date.now();
+  }
+  function hasReviewTimeFilters() {
+    return state.reviewFrom || state.reviewTo || state.reviewedFrom || state.reviewedTo ||
+      state.reviewedTime === 'none' || state.reviewedTime === 'notToday';
+  }
   function inReviewTime(w) {
-    if (!state.reviewFrom && !state.reviewTo) return true;
-    var t = learnedAt(recOf(w) || {});
-    return t > 0 && (!state.reviewFrom || t >= state.reviewFrom) && (!state.reviewTo || t <= state.reviewTo);
+    var m = recOf(w) || {}, t = learnedAt(m), r = m.reviewedAt || 0;
+    if ((state.reviewFrom || state.reviewTo) &&
+      !(t > 0 && (!state.reviewFrom || t >= state.reviewFrom) && (!state.reviewTo || t <= state.reviewTo))) return false;
+    if (state.reviewedTime === 'none') return !r;
+    if (state.reviewedTime === 'notToday') return !r || r < state.reviewedFrom;
+    return (!state.reviewedFrom && !state.reviewedTo) ||
+      (r > 0 && (!state.reviewedFrom || r >= state.reviewedFrom) && (!state.reviewedTo || r <= state.reviewedTo));
   }
   /* 待巩固池：分数 0~2 的词，到期优先，同词条只计一次 */
   function duePool() {
@@ -574,6 +590,9 @@
     reviewTime: 'all',    /* 首次学习时间：all / 10 / 30 / 60 分钟 / today / custom */
     reviewFrom: 0,
     reviewTo: 0,
+    reviewedTime: 'all',  /* 最近复习时间，可与首次学习时间组合筛选 */
+    reviewedFrom: 0,
+    reviewedTo: 0,
     rquiz: null,          /* 复习做题会话：{ scope, qs, i, score, proCount, avail } */
     collapsed: {},        /* 词表分组折叠状态：键为「课号|组序」 */
     quizSegs: {}          /* 测验选中的生词表：课号 -> 组序数组；无键 = 全部 */
@@ -762,7 +781,7 @@
 
   /* 复习统计：选定课次时只统计该课，否则为全局统计 */
   function revStats() {
-    if (!state.reviewLesson && !state.reviewFrom && !state.reviewTo) return globalStats();
+    if (!state.reviewLesson && !hasReviewTimeFilters()) return globalStats();
     var due = duePool(), pro = proPoolAll().length, now = Date.now();
     return {
       review: due.length, pro: pro, proSample: Math.min(pro, PRO_SAMPLE),
@@ -795,15 +814,22 @@
     var d = new Date(t);
     return new Date(t - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
   }
-  function revTimeSelect() {
+  function revTimeSelect(reviewed) {
+    var prefix = reviewed ? 'revReviewed' : 'revTime', field = reviewed ? 'reviewed' : 'review';
+    var label = reviewed ? '最近复习时间' : '首次学习时间';
     var options = [['all', '全部时间'], ['10', '最近 10 分钟'], ['30', '最近 30 分钟'],
-      ['60', '最近 1 小时'], ['today', '今天新学'], ['custom', '自定义时间范围']];
-    var html = '<select class="rev-lesson" id="revTime" aria-label="学习时间范围">' + options.map(function (o) {
-      return '<option value="' + o[0] + '"' + (state.reviewTime === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
-    }).join('') + '</select><span class="rev-mode-tip" title="复习不会改变首次学习时间，旧记录使用已有的学习记录时间">按首次学习时间筛选</span>';
-    if (state.reviewTime === 'custom') html += '<form id="revTimeForm" class="rev-time-form">' +
-      '<label>从 <input class="rev-lesson" id="revTimeFrom" type="datetime-local" required value="' + localDateTime(state.reviewFrom) + '"></label>' +
-      '<label>至 <input class="rev-lesson" id="revTimeTo" type="datetime-local" required value="' + localDateTime(state.reviewTo) + '"></label>' +
+      ['60', '最近 1 小时'], ['today', reviewed ? '今天复习过' : '今天新学'], ['custom', '自定义时间范围']];
+    if (reviewed) options.splice(1, 0, ['none', '尚无复习记录'], ['notToday', '今天未复习']);
+    var html = '<label class="rev-time-label" title="' + (reviewed
+      ? '仅记录复习中答题或卡片判级的时间，旧记录无法还原历史复习时间'
+      : '复习不会改变首次学习时间，旧记录使用已有的学习记录时间') + '">' + label +
+      ' <select class="rev-lesson" id="' + prefix + '" aria-label="' + (reviewed ? '复习时间范围' : '学习时间范围') + '">' + options.map(function (o) {
+      return '<option value="' + o[0] + '"' + (state[field + 'Time'] === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+    }).join('') + '</select></label>';
+    if (state[field + 'Time'] === 'custom') html += '<form id="' + prefix + 'Form" class="rev-time-form">' +
+      '<span class="rev-mode-tip">' + label + '</span>' +
+      '<label>从 <input class="rev-lesson" id="' + prefix + 'From" type="datetime-local" required value="' + localDateTime(state[field + 'From']) + '"></label>' +
+      '<label>至 <input class="rev-lesson" id="' + prefix + 'To" type="datetime-local" required value="' + localDateTime(state[field + 'To']) + '"></label>' +
       '<button type="submit">应用时间范围</button></form>';
     return html;
   }
@@ -844,7 +870,7 @@
         : active === 'card'
           ? ''
           : '') + '</span>' +
-      revLessonSelect() + revTimeSelect() +
+      revLessonSelect() + revTimeSelect(false) + revTimeSelect(true) +
       '</div>';
   }
 
@@ -855,13 +881,13 @@
 
   function viewReviewEmpty(scope) {
     var s = globalStats();
-    if (state.reviewLesson || state.reviewFrom || state.reviewTo) {
+    if (state.reviewLesson || hasReviewTimeFilters()) {
       return '<div class="review-wrap">' + revTabs(scope) + emptyModeBar() +
         '<div class="empty"><b>' + (state.reviewLesson ? '第 ' + state.reviewLesson + ' 课' : '') +
-        (state.reviewFrom || state.reviewTo ? '所选学习时间内' : '') +
+        (hasReviewTimeFilters() ? '所选时间条件下' : '') +
         '没有' + (scope === 'pro' ? '已掌握' : '待巩固') + '的词</b>' +
         '<div class="continue-row" style="justify-content:center;margin-top:20px">' +
-        (state.reviewFrom || state.reviewTo ? '<button class="btn" data-rtime-clear>清除时间筛选</button>' : '') +
+        (hasReviewTimeFilters() ? '<button class="btn" data-rtime-clear>清除时间筛选</button>' : '') +
         '<button class="btn primary" data-rlesson="0">查看全部课程</button>' +
         '</div></div></div>';
     }
@@ -1132,6 +1158,7 @@
     var step = proStepAfterOk(prev);
     store.marks[keyOf(w)] = {
       learnedAt: learnedAt(prev) || Date.now(),
+      reviewedAt: prev.reviewedAt || 0,
       lv: LV_MAX, t: Date.now(), ok: proNeed(), step: step,
       err: Math.max(0, (prev.err || 0) - 1), due: dueAfter(LV_MAX, step), od: prev.od || ''
     };
@@ -1143,6 +1170,7 @@
     var prev = recOf(w) || {};
     store.marks[keyOf(w)] = {
       learnedAt: learnedAt(prev) || Date.now(),
+      reviewedAt: prev.reviewedAt || 0,
       lv: 1, t: Date.now(), ok: 0, step: lapseStep(prev),
       err: (prev.err || 0) + 1, due: dueAfter(1, 0), od: prev.od || ''
     };
@@ -1152,6 +1180,7 @@
   }
   /* 掌握复习按词结算：首次答错即打回待巩固；全部题型答对且仍为掌握态时推进一次间隔 */
   function proSettle(sess, cur, ok) {
+    recordReviewTime(cur.item);
     var k = keyOf(cur.item);
     var st = sess.stat || (sess.stat = {});
     var e = st[k] || (st[k] = { ok: 0, wrong: 0, done: 0 });
@@ -1298,7 +1327,7 @@
     var head = revTabs(scope) + revModeBar('list');
 
     if (!all.length) {
-      if (state.reviewLesson || state.reviewFrom || state.reviewTo) return viewReviewEmpty(scope);
+      if (state.reviewLesson || hasReviewTimeFilters()) return viewReviewEmpty(scope);
       return '<div class="review-wrap">' + head +
         '<div class="empty"><b>' + (scope === 'pro' ? '还没有掌握词' : '待巩固池已清空') + '</b>' +
         '<p>' + (scope === 'pro'
@@ -2123,6 +2152,7 @@
       if (!card) return;
       word = card.w;
       wasPro = lvOf(word) >= LV_MAX;
+      recordReviewTime(word);
       /* 掌握词判级：忘记打回待巩固，记住与掌握均保持掌握 */
       res = markWord(word, lv);
     } else {
@@ -2231,24 +2261,29 @@
 
   document.addEventListener('change', function (e) {
     if (e.target && e.target.id === 'revLesson') setReviewLesson(+e.target.value);
-    if (e.target && e.target.id === 'revTime') {
-      state.reviewTime = e.target.value;
+    if (e.target && (e.target.id === 'revTime' || e.target.id === 'revReviewed')) {
+      var field = e.target.id === 'revReviewed' ? 'reviewed' : 'review';
+      state[field + 'Time'] = e.target.value;
       var now = Date.now(), from = 0;
-      if (state.reviewTime === 'today') { var d = new Date(now); d.setHours(0, 0, 0, 0); from = +d; }
-      else if (/^\d+$/.test(state.reviewTime)) from = now - (+state.reviewTime * 60000);
-      state.reviewFrom = from; state.reviewTo = 0;
+      if (e.target.value === 'today' || e.target.value === 'notToday') { var d = new Date(now); d.setHours(0, 0, 0, 0); from = +d; }
+      else if (/^\d+$/.test(e.target.value)) from = now - (+e.target.value * 60000);
+      state[field + 'From'] = from; state[field + 'To'] = 0;
       resetReviewSession();
     }
-    if (e.target && (e.target.id === 'revTimeFrom' || e.target.id === 'revTimeTo')) $('#revTimeTo').setCustomValidity('');
+    if (e.target && /^(revTime|revReviewed)(From|To)$/.test(e.target.id)) {
+      $('#' + e.target.id.replace(/(From|To)$/, 'To')).setCustomValidity('');
+    }
   });
 
   document.addEventListener('submit', function (e) {
-    if (e.target.id !== 'revTimeForm') return;
+    if (e.target.id !== 'revTimeForm' && e.target.id !== 'revReviewedForm') return;
     e.preventDefault();
-    var from = +new Date($('#revTimeFrom').value), to = +new Date($('#revTimeTo').value);
+    var prefix = e.target.id.replace(/Form$/, ''), field = prefix === 'revReviewed' ? 'reviewed' : 'review';
+    var endInput = $('#' + prefix + 'To');
+    var from = +new Date($('#' + prefix + 'From').value), to = +new Date(endInput.value);
     if (!isFinite(from) || !isFinite(to)) return;
-    if (from > to) { $('#revTimeTo').setCustomValidity('结束时间不能早于开始时间'); $('#revTimeTo').reportValidity(); return; }
-    state.reviewFrom = from; state.reviewTo = to + 59999; /* 包含结束时间的整分钟 */
+    if (from > to) { endInput.setCustomValidity('结束时间不能早于开始时间'); endInput.reportValidity(); return; }
+    state[field + 'From'] = from; state[field + 'To'] = to + 59999; /* 包含结束时间的整分钟 */
     resetReviewSession();
   });
 
@@ -2259,6 +2294,7 @@
     var t = e.target;
     if (t.closest('[data-rtime-clear]')) {
       state.reviewTime = 'all'; state.reviewFrom = 0; state.reviewTo = 0;
+      state.reviewedTime = 'all'; state.reviewedFrom = 0; state.reviewedTo = 0;
       resetReviewSession(); return;
     }
 
@@ -2401,6 +2437,7 @@
           state.reviewPhase = 'quiz';   /* 从首页或结果页进入时直接进入做题检验 */
           state.reviewLesson = 0;       /* 范围复位为全部课程 */
           state.reviewTime = 'all'; state.reviewFrom = 0; state.reviewTo = 0;
+          state.reviewedTime = 'all'; state.reviewedFrom = 0; state.reviewedTo = 0;
         }
         state.reviewDeck = null; state.rquiz = null;
         state.idx = 0; state.flipped = false;
