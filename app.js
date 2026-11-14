@@ -278,7 +278,7 @@
       step = lapseStep(prev);
     }                                               /* 待巩固保留 step */
     if (due === null) due = dueAfter(nl, step);
-    store.marks[k] = { lv: nl, t: Date.now(), learnedAt: learnedAt(prev) || Date.now(), reviewedAt: prev.reviewedAt || 0, ok: ok, step: step, err: err, due: due, od: od };
+    store.marks[k] = { lv: nl, t: Date.now(), learnedAt: learnedAt(prev) || Date.now(), masteredAt: nl >= LV_MAX && !wasPro ? Date.now() : (prev.masteredAt || 0), reviewedAt: prev.reviewedAt || 0, ok: ok, step: step, err: err, due: due, od: od };
     bumpToday();
     saveStore();
     return { lv: nl, ok: ok, need: need, promoted: nl >= LV_MAX && !wasPro, left: Math.max(0, need - ok), capped: capped, shortened: shortened };
@@ -288,6 +288,7 @@
     var prev = recOf(w) || {};
     store.marks[keyOf(w)] = {
       learnedAt: learnedAt(prev) || Date.now(),
+      masteredAt: prev.masteredAt || 0,
       reviewedAt: prev.reviewedAt || 0,
       lv: 1, t: Date.now(), ok: 0, step: prev.lv >= LV_MAX ? lapseStep(prev) : (prev.step || 0),
       err: (prev.err || 0) + 1, due: dueAfter(1, 0), od: prev.od || ''
@@ -398,7 +399,7 @@
     var n = state.reviewLesson;
     return (n && DATA[n]) ? [String(n)] : Object.keys(DATA);
   }
-  /* 按首次学习时间筛选，旧记录退回已有时间，复习不改变所属时间段 */
+  /* 保留首次学习时间，兼容已有学习记录 */
   function learnedAt(prev) { return prev.learnedAt || prev.t || 0; }
   /* 只有在复习中提交答案或卡片判级才记时间，单纯浏览不算复习 */
   function recordReviewTime(w) {
@@ -411,7 +412,7 @@
       state.reviewedTime === 'none' || state.reviewedTime === 'notToday';
   }
   function inReviewTime(w) {
-    var m = recOf(w) || {}, t = learnedAt(m), r = m.reviewedAt || 0;
+    var m = recOf(w) || {}, t = m.masteredAt || 0, r = m.reviewedAt || 0;
     if ((state.reviewFrom || state.reviewTo) &&
       !(t > 0 && (!state.reviewFrom || t >= state.reviewFrom) && (!state.reviewTo || t <= state.reviewTo))) return false;
     if (state.reviewedTime === 'none') return !r;
@@ -587,10 +588,10 @@
     reviewSort: 'err',    /* 列表排序：err 错得多优先 / due 到期最近 / lesson 按课次 */
     reviewFilter: 'all',  /* 列表筛选：all / due 已到期 / err 错 ≥ 2 */
     reviewLesson: 0,      /* 复习课程范围：0 为全部课程，否则为课次；两池共用 */
-    reviewTime: 'all',    /* 首次学习时间：all / 10 / 30 / 60 分钟 / today / custom */
+    reviewTime: 'all',    /* 最近变为已掌握的时间：all / 10 / 30 / 60 分钟 / today / custom */
     reviewFrom: 0,
     reviewTo: 0,
-    reviewedTime: 'all',  /* 最近复习时间，可与首次学习时间组合筛选 */
+    reviewedTime: 'all',  /* 最近复习时间，可与掌握时间组合筛选 */
     reviewedFrom: 0,
     reviewedTo: 0,
     rquiz: null,          /* 复习做题会话：{ scope, qs, i, score, proCount, avail } */
@@ -816,14 +817,14 @@
   }
   function revTimeSelect(reviewed) {
     var prefix = reviewed ? 'revReviewed' : 'revTime', field = reviewed ? 'reviewed' : 'review';
-    var label = reviewed ? '最近复习时间' : '首次学习时间';
+    var label = reviewed ? '最近复习时间' : '掌握时间';
     var options = [['all', '全部时间'], ['10', '最近 10 分钟'], ['30', '最近 30 分钟'],
-      ['60', '最近 1 小时'], ['today', reviewed ? '今天复习过' : '今天新学'], ['custom', '自定义时间范围']];
+      ['60', '最近 1 小时'], ['today', reviewed ? '今天复习过' : '今天掌握'], ['custom', '自定义时间范围']];
     if (reviewed) options.splice(1, 0, ['none', '尚无复习记录'], ['notToday', '今天未复习']);
     var html = '<div class="rev-filter"><label class="rev-time-label" title="' + (reviewed
       ? '仅记录复习中答题或卡片判级的时间，旧记录无法还原历史复习时间'
-      : '复习不会改变首次学习时间，旧记录使用已有的学习记录时间') + '">' + label +
-      ' <select class="rev-lesson" id="' + prefix + '" aria-label="' + (reviewed ? '复习时间范围' : '学习时间范围') + '">' + options.map(function (o) {
+      : '记录最近一次从未掌握变为已掌握的时间，保持掌握不更新时间，旧记录无法还原历史掌握时间') + '">' + label +
+      ' <select class="rev-lesson" id="' + prefix + '" aria-label="' + (reviewed ? '复习时间范围' : '掌握时间范围') + '">' + options.map(function (o) {
       return '<option value="' + o[0] + '"' + (state[field + 'Time'] === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
     }).join('') + '</select></label>';
     if (state[field + 'Time'] === 'custom') html += '<form id="' + prefix + 'Form" class="rev-time-form">' +
@@ -1155,6 +1156,7 @@
     var step = proStepAfterOk(prev);
     store.marks[keyOf(w)] = {
       learnedAt: learnedAt(prev) || Date.now(),
+      masteredAt: prev.masteredAt || 0,
       reviewedAt: prev.reviewedAt || 0,
       lv: LV_MAX, t: Date.now(), ok: proNeed(), step: step,
       err: Math.max(0, (prev.err || 0) - 1), due: dueAfter(LV_MAX, step), od: prev.od || ''
@@ -1167,6 +1169,7 @@
     var prev = recOf(w) || {};
     store.marks[keyOf(w)] = {
       learnedAt: learnedAt(prev) || Date.now(),
+      masteredAt: prev.masteredAt || 0,
       reviewedAt: prev.reviewedAt || 0,
       lv: 1, t: Date.now(), ok: 0, step: lapseStep(prev),
       err: (prev.err || 0) + 1, due: dueAfter(1, 0), od: prev.od || ''
