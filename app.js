@@ -850,12 +850,13 @@
   function revTabs(active) {
     var s = revStats();
     var tip;
-    if (active === 'pro') tip = '已掌握 ' + s.pro + ' 个 · 每轮最多抽 ' + PRO_SAMPLE + ' 个 · 到期时间排序';
+    if (active === 'pro') tip = '已掌握 ' + s.pro + ' 个 · ' +
+      (state.reviewPhase === 'quiz' ? '按所选词数出题' : state.reviewPhase === 'list' ? '显示全部词' : '每轮最多抽 ' + PRO_SAMPLE + ' 个') + ' · 到期时间排序';
     else if (s.review) tip = (s.dueNow ? '今日到期 ' + s.dueNow + ' 个 · ' : '暂无到期 · ') + '共 ' + s.review + ' 个，到期时间排序';
     else tip = '遗忘 / 记住 / 测验答错的词';
     return '<div class="rev-tabs">' +
       '<button data-scope="due" class="' + (active === 'due' ? 'on' : '') + '">待巩固 <b>' + s.review + '</b></button>' +
-      '<button data-scope="pro" class="' + (active === 'pro' ? 'on' : '') + '">掌握复习 <b>' + s.proSample + '</b></button>' +
+      '<button data-scope="pro" class="' + (active === 'pro' ? 'on' : '') + '">掌握复习 <b>' + (state.reviewPhase === 'card' ? s.proSample : s.pro) + '</b></button>' +
       '<span class="rev-tip">' + tip + '</span>' +
       '</div>';
   }
@@ -1128,7 +1129,8 @@
   }
 
   function buildReviewQuiz(scope) {
-    var pool = poolOf(scope);                    /* 已按到期优先排序 */
+    var candidates = scope === 'pro' ? proPoolAll() : duePool();
+    var pool = candidates; /* 做题按所选词数取词，不使用翻卡的抽样上限 */
     if (!pool.length) return { scope: scope, qs: [], i: 0, score: 0, proCount: 0, avail: [], wrong: [], fixed: false, stat: {}, total: {} };
     /* 先截取候选词，再打乱 */
     var cards = shuffle(pool.slice(0, quizQn(pool.length)));
@@ -1144,7 +1146,7 @@
 
     spokenKey = '';
     return {
-      scope: scope, qs: qs, i: 0, score: 0, proCount: 0,
+      scope: scope, qs: qs, i: 0, score: 0, proCount: 0, matchedCount: candidates.length,
       avail: avTypes.map(function (t) { return t.id; }), wrong: [], fixed: false,
       stat: {}, total: wordTotals(qs)
     };
@@ -1230,7 +1232,11 @@
     var q = state.rquiz;
     if (!q.qs.length) return viewReviewEmpty(scope);
 
-    var head = revTabs(scope) + revModeBar('quiz');
+    var roundWords = Object.keys(q.total).length;
+    var head = revTabs(scope) + revModeBar('quiz') +
+      '<div class="rev-quiz-summary"><span>' + (q.fixed ? '错题重练' : '符合筛选 ' + q.matchedCount + ' 词') +
+      ' · 本轮 ' + roundWords + ' 词，共 ' + q.qs.length + ' 题</span>' +
+      '<small>每词按勾选题型出题</small></div>';
     var onMap = quizOn();
     var effId = q.avail.filter(function (id) { return onMap[id]; }).length ? null : q.avail[0];
     var chips = '<div class="qt-bar"><em>题型</em><div class="qtypes" id="qtypes">' +

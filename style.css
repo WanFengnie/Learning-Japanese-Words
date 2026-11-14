@@ -636,6 +636,8 @@ button{font-family:inherit}
 .rev-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .rev-filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:start;gap:12px;margin-top:14px}
 .rev-filter{min-width:0}
+.rev-quiz-summary{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;margin:0 0 14px;color:var(--muted);font-size:12px}
+.rev-quiz-summary small{font-size:11px}
 .rev-filters .rev-lesson{width:100%;min-width:0}
 .rev-mode button{
   height:30px;padding:0 14px;border-radius:var(--pill);border:1px dashed var(--rule);
