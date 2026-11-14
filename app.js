@@ -820,7 +820,7 @@
     var options = [['all', '全部时间'], ['10', '最近 10 分钟'], ['30', '最近 30 分钟'],
       ['60', '最近 1 小时'], ['today', reviewed ? '今天复习过' : '今天新学'], ['custom', '自定义时间范围']];
     if (reviewed) options.splice(1, 0, ['none', '尚无复习记录'], ['notToday', '今天未复习']);
-    var html = '<label class="rev-time-label" title="' + (reviewed
+    var html = '<div class="rev-filter"><label class="rev-time-label" title="' + (reviewed
       ? '仅记录复习中答题或卡片判级的时间，旧记录无法还原历史复习时间'
       : '复习不会改变首次学习时间，旧记录使用已有的学习记录时间') + '">' + label +
       ' <select class="rev-lesson" id="' + prefix + '" aria-label="' + (reviewed ? '复习时间范围' : '学习时间范围') + '">' + options.map(function (o) {
@@ -831,7 +831,7 @@
       '<label>从 <input class="rev-lesson" id="' + prefix + 'From" type="datetime-local" required value="' + localDateTime(state[field + 'From']) + '"></label>' +
       '<label>至 <input class="rev-lesson" id="' + prefix + 'To" type="datetime-local" required value="' + localDateTime(state[field + 'To']) + '"></label>' +
       '<button type="submit">应用时间范围</button></form>';
-    return html;
+    return html + '</div>';
   }
   function setReviewLesson(n) {
     state.reviewLesson = n;
@@ -861,17 +861,14 @@
 
   /* 复习练法：做题检验 / 翻卡重看 / 词条列表 */
   function revModeBar(active) {
-    return '<div class="rev-mode">' +
+    return '<div class="rev-mode"><div class="rev-actions">' +
       '<button data-rphase="quiz" class="' + (active === 'quiz' ? 'on' : '') + '">做题检验</button>' +
       '<button data-rphase="card" class="' + (active === 'card' ? 'on' : '') + '">翻卡重看</button>' +
       '<button data-rphase="list" class="' + (active === 'list' ? 'on' : '') + '">词条列表</button>' +
-      '<span class="rev-mode-tip">' + (active === 'quiz'
-        ? ''
-        : active === 'card'
-          ? ''
-          : '') + '</span>' +
-      revLessonSelect() + revTimeSelect(false) + revTimeSelect(true) +
-      '</div>';
+      '</div><div class="rev-filters" aria-label="复习筛选">' +
+      '<label class="rev-filter rev-time-label">课程' + revLessonSelect() + '</label>' +
+      revTimeSelect(false) + revTimeSelect(true) +
+      '</div></div>';
   }
 
   /* 空态下仍可切换练法 */

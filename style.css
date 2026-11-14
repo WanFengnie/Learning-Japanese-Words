@@ -632,7 +632,11 @@ button{font-family:inherit}
 .rev-tip{font-size:12px;color:var(--muted);margin-left:4px}
 
 /* 复习的两种练法：做题检验 / 翻卡重看 */
-.rev-mode{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:-8px 0 18px}
+.rev-mode{margin:-8px 0 18px}
+.rev-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.rev-filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:start;gap:12px;margin-top:14px}
+.rev-filter{min-width:0}
+.rev-filters .rev-lesson{width:100%;min-width:0}
 .rev-mode button{
   height:30px;padding:0 14px;border-radius:var(--pill);border:1px dashed var(--rule);
   background:transparent;color:var(--muted);font-size:12px;cursor:pointer;
@@ -648,10 +652,16 @@ button{font-family:inherit}
   transition:border-color .3s;
 }
 .rev-lesson:hover{border-color:var(--ctl-edge-hi)}
-.rev-time-form{display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex-basis:100%}
-.rev-time-label{display:flex;align-items:center;gap:6px;max-width:100%;font-size:12px;color:var(--muted)}
+.rev-time-form{display:flex;align-items:stretch;gap:8px;flex-direction:column;margin-top:10px}
+.rev-time-form .rev-mode-tip{display:none}
+.rev-time-label{display:flex;flex-direction:column;align-items:stretch;gap:6px;max-width:100%;font-size:12px;color:var(--muted)}
 .rev-time-form label{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px;max-width:100%}
 .rev-time-form input{min-width:0;max-width:100%;font-family:inherit}
+@media(max-width:600px){
+  .rev-filters{grid-template-columns:minmax(0,1fr);gap:10px}
+  .rev-time-label{display:grid;grid-template-columns:88px minmax(0,1fr);align-items:center;gap:8px}
+  .rev-time-form{margin-left:96px}
+}
 
 /* ---------- 复习：词条列表 ---------- */
 .rl-sum{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:0 2px 12px}
